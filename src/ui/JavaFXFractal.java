@@ -1,4 +1,4 @@
-package javafxlife;
+package ui;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -10,7 +10,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javafx.application.Application;
 import javafx.event.ActionEvent;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Alert;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.Label;
@@ -18,9 +21,12 @@ import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.input.KeyCombination;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Pane;
+import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 
 /**
@@ -30,9 +36,19 @@ import javafx.stage.Stage;
  */
 public class JavaFXFractal extends Application {
 
+    final int WIDTH = 400;
+    final int HEIGHT = 400;
     Label lbStatus;
     Pane fractalPane;
     Stage pStage;
+    Canvas canvas;
+    GraphicsContext g;
+    int lastMouseX = WIDTH / 2;
+    int lastMouseY = HEIGHT / 2;
+    double magnification = 1;
+    int maxLoops = 1000;
+    double xCenterReal = 0.0;
+    double yCenterReal = 0.0;
 
     @Override
     public void start(Stage primaryStage) {
@@ -40,6 +56,30 @@ public class JavaFXFractal extends Application {
         lbStatus = new Label("Status: starting JavaFXFractal...");
         fractalPane = new Pane();
 
+        // set the x,y cell count proportional to the screen size or 100 whichever is greater
+//        Rectangle2D primaryScreenBounds = Screen.getPrimary().getVisualBounds();
+//        int screenWidth = (int) primaryScreenBounds.getWidth();
+//        System.out.println("width=" + screenWidth);
+//        int screenHeight = (int) primaryScreenBounds.getHeight();
+//        System.out.println("height=" + screenHeight);
+        // create the main array for the game of life simulation
+//        this.cells = new int[xCellCount][yCellCount];
+//        randomizeCells();
+        // a canvas is used to display a visual representation of the simulation
+        canvas = new Canvas();
+        canvas.setWidth(WIDTH);
+        canvas.setHeight(HEIGHT);
+        fractalPane.getChildren().add(canvas);
+
+        g = canvas.getGraphicsContext2D();
+        g.setFill(Color.BLACK);
+        g.fillRect(0, 0, WIDTH, HEIGHT);
+
+        // each rectangular cell can be clicked to turn it on or off
+        canvas.setOnMouseClicked((MouseEvent event) -> {
+            lastMouseX = (int) event.getX();
+            lastMouseY = (int) event.getY();
+        });
         BorderPane borderPane = new BorderPane();
         borderPane.setTop(myMenuBar());
         borderPane.setCenter(fractalPane);
@@ -53,6 +93,61 @@ public class JavaFXFractal extends Application {
 //        primaryStage.setFullScreen(true);
         primaryStage.hide();
         primaryStage.show();
+
+    }
+
+    public void drawFractal() {
+        double x, x0, x2, y, y0, y2;
+
+        // panel width center point in pixel units
+        int widthCenterPoint = WIDTH / 2;
+
+        // increment is the pixel to pixel increment amount in real units
+        double increment = 4.0 / magnification / WIDTH;
+
+        xCenterReal = xCenterReal + ((lastMouseX - WIDTH / 2) * 4.0 / magnification / WIDTH);
+        yCenterReal = yCenterReal - ((lastMouseY - WIDTH / 2) * 4.0 / magnification / WIDTH);
+
+        double centerWidthReal = WIDTH / 2 * increment;
+        double xTopLeftReal = xCenterReal - centerWidthReal;
+        double yTopLeftReal = yCenterReal + centerWidthReal;
+
+        // step through each row of the drawing area
+        for (int py = 0; py < WIDTH; py++) {
+            double yReal = yTopLeftReal - increment * py;
+            double yRealSquared = yReal * yReal;
+
+            // step through each column of a single row of pixels
+            for (int px = 0; px < WIDTH; ++px) {
+                x = x0 = xTopLeftReal + increment * px;
+                y = y0 = yReal;
+                x2 = x * x;
+                y2 = yRealSquared;
+
+                // calculate fractal value (i) for a single pixel
+                // using the complex number formula z=z*z+c
+                int i = 0;
+                while (i < maxLoops && (x2 + y2 < 4)) {
+                    y = 2 * x * y + y0;
+                    x = x2 - y2 + x0;
+
+                    x2 = x * x;
+                    y2 = y * y;
+
+                    ++i;
+                }
+
+                int blue = i > 255 ? i % 255 : 100;
+                int green = i <= 255 ? i : 50;
+                int red = i <= 255 ? i : 50;
+                if (i == maxLoops) {
+                    g.setFill(Color.BLACK);
+                } else {
+                    g.setFill(Color.rgb(red, green, blue));
+                }
+                g.fillRect(px, py, 1, 1);
+            }
+        }
     }
 
     /**
@@ -60,16 +155,17 @@ public class JavaFXFractal extends Application {
      *
      * FYI: menu accelerator key codes are listed at:
      * https://docs.oracle.com/javase/8/javafx/api/javafx/scene/input/KeyCode.html
-     * @return 
+     *
+     * @return
      */
     public MenuBar myMenuBar() {
         MenuBar myBar = new MenuBar();
         final Menu fileMenu = new Menu("File");
-        final Menu speedMenu = new Menu("Speed");
+        final Menu drawMenu = new Menu("Draw");
         final Menu optionsMenu = new Menu("Options");
         final Menu helpMenu = new Menu("Help");
 
-        myBar.getMenus().addAll(fileMenu, speedMenu, optionsMenu, helpMenu);
+        myBar.getMenus().addAll(fileMenu, drawMenu, optionsMenu, helpMenu);
 
         /**
          * *********************************************************************
@@ -77,9 +173,8 @@ public class JavaFXFractal extends Application {
          */
         MenuItem newCanvas = new MenuItem("New");
         newCanvas.setOnAction((ActionEvent e) -> {
-//            fractalPane.clearCells();
-//            fractalPane.drawCells();
-//            fractalPane.pause();
+            g.setFill(Color.BLUE);
+            g.fillRect(0, 0, 200, 150);
         });
         fileMenu.getItems().add(newCanvas);
 
@@ -112,31 +207,31 @@ public class JavaFXFractal extends Application {
         fileMenu.getItems().add(exit);
         /**
          * *********************************************************************
-         * *********************************************************************
-         * Speed Menu Section
+         * Draw Menu Section
          */
 
-        MenuItem pause = new MenuItem("Pause");
-        pause.setAccelerator(KeyCombination.valueOf("Left"));
-//        pause.setOnAction(e -> fractalPane.pause());
-        speedMenu.getItems().add(pause);
+        MenuItem draw = new MenuItem("Draw");
+        draw.setAccelerator(KeyCombination.keyCombination("Ctrl+D"));
+        draw.setOnAction(e -> {
+            drawFractal();
+        });
+        drawMenu.getItems().add(draw);
 
-        MenuItem play = new MenuItem("Play");
-        play.setAccelerator(KeyCombination.valueOf("Right"));
-//        play.setOnAction(e -> fractalPane.play());
-        speedMenu.getItems().add(play);
+        MenuItem zoomIn = new MenuItem("Zoom-In");
+        zoomIn.setAccelerator(KeyCombination.keyCombination("Ctrl+I"));
+        zoomIn.setOnAction(e -> {
+            magnification *= 2;
+//            drawFractal();
+        });
+        drawMenu.getItems().add(zoomIn);
 
-        MenuItem faster = new MenuItem("Faster");
-        faster.setAccelerator(KeyCombination.keyCombination("Ctrl+Up"));
-//        faster.setOnAction(e -> fractalPane.increaseSpeed());
-        speedMenu.getItems().add(faster);
-
-
-        MenuItem slower = new MenuItem("Slower");
-        slower.setAccelerator(KeyCombination.keyCombination("Ctrl+Down"));
-//        slower.setOnAction(e -> fractalPane.decreaseSpeed());
-        speedMenu.getItems().add(slower);
-
+        MenuItem zoomOut = new MenuItem("Zoom-Out");
+        zoomOut.setAccelerator(KeyCombination.keyCombination("Ctrl+O"));
+        zoomOut.setOnAction(e -> {
+            magnification = (magnification < 2) ? 1 : (magnification /= 2);
+//            drawFractal();
+        });
+        drawMenu.getItems().add(zoomOut);
 
         /**
          * *********************************************************************
@@ -156,7 +251,6 @@ public class JavaFXFractal extends Application {
          * *********************************************************************
          * Help Menu Section
          */
-        
         MenuItem about = new MenuItem("About");
         about.setOnAction((ActionEvent e) -> {
             String message = "Fractal\n";
